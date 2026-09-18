@@ -1,7 +1,7 @@
 import math
 import streamlit as st
 
-st.set_page_config(page_title="EPL Simple Predictor", page_icon="⚽", layout="centered")
+st.set_page_config(page_title="EPL Match Predictor", page_icon="⚽", layout="centered")
 
 TEAMS = [
     "Arsenal","Aston Villa","Bournemouth","Brentford","Brighton & Hove Albion",
@@ -11,75 +11,107 @@ TEAMS = [
     "Wolverhampton Wanderers"
 ]
 
-# Editable baseline expected goals. These are deliberately neutral defaults.
-# Replace/update them with your own current data as you develop the model.
-DEFAULT_HOME_XG = 1.55
-DEFAULT_AWAY_XG = 1.25
-DEFAULT_CORNERS = 10.0
+# Neutral starter inputs. Replace with a current EPL data feed/model in the next version.
+ATTACK = {t: 1.0 for t in TEAMS}
+DEFENSE = {t: 1.0 for t in TEAMS}
+CORNERS_FOR = {t: 5.0 for t in TEAMS}
+CORNERS_AGAINST = {t: 5.0 for t in TEAMS}
+LEAGUE_HOME_GOALS = 1.55
+LEAGUE_AWAY_GOALS = 1.25
+
+def poisson_pmf(k, lam):
+    return math.exp(-lam) * lam**k / math.factorial(k)
 
 def poisson_cdf(k, lam):
-    return sum(math.exp(-lam) * lam**i / math.factorial(i) for i in range(k + 1))
+    return sum(poisson_pmf(i, lam) for i in range(k + 1))
 
-def over_half_line_probability(line, expected):
-    # For X.5 markets: Over 2.5 = P(X >= 3)
-    cutoff = math.floor(line)
-    return 1.0 - poisson_cdf(cutoff, expected)
+def over_prob(line, expected):
+    return 1 - poisson_cdf(math.floor(line), expected)
 
-def pct(x):
-    return f"{100*x:.1f}%"
+def pct(p):
+    return f"{100*p:.1f}%"
 
-st.title("⚽ EPL Simple Predictor")
-st.caption("Simple probability calculator for goals and corners. No Kalshi prices are used.")
+def expected_goals(home, away):
+    hxg = LEAGUE_HOME_GOALS * ATTACK[home] * DEFENSE[away]
+    axg = LEAGUE_AWAY_GOALS * ATTACK[away] * DEFENSE[home]
+    return hxg, axg
 
-home = st.selectbox("Home team", TEAMS, index=0)
-away_options = [t for t in TEAMS if t != home]
-away = st.selectbox("Away team", away_options, index=0)
+def expected_corners(home, away):
+    hc = (CORNERS_FOR[home] + CORNERS_AGAINST[away]) / 2
+    ac = (CORNERS_FOR[away] + CORNERS_AGAINST[home]) / 2
+    return hc, ac
 
-market = st.selectbox(
-    "Prediction type",
-    ["Total Match Goals", "Individual Team Goals", "Total Match Corners"]
+def ou_rows(lines, expected):
+    out = []
+    for line in lines:
+        over = over_prob(line, expected)
+        out.append({"Line": f"{line:.1f}", "Over": pct(over), "Under": pct(1-over)})
+    return out
+
+def result_probabilities(home_lambda, away_lambda, max_goals=12):
+    home_win = draw = away_win = 0.0
+    for h in range(max_goals + 1):
+        ph = poisson_pmf(h, home_lambda)
+        for a in range(max_goals + 1):
+            p = ph * poisson_pmf(a, away_lambda)
+            if h > a: home_win += p
+            elif h == a: draw += p
+            else: away_win += p
+    total = home_win + draw + away_win
+    return home_win/total, draw/total, away_win/total
+
+st.title("⚽ EPL Match Predictor")
+st.caption("One matchup → all core probabilities. No Kalshi market percentage is used.")
+
+home = st.selectbox("Home team", TEAMS)
+away = st.selectbox("Away team", [t for t in TEAMS if t != home])
+
+hxg, axg = expected_goals(home, away)
+txg = hxg + axg
+hc, ac = expected_corners(home, away)
+tc = hc + ac
+hp, dp, ap = result_probabilities(hxg, axg)
+
+st.header(f"{home} vs {away}")
+
+st.subheader("🏆 Match result")
+result_rows = [
+    {"Outcome": f"{home} win", "Probability": pct(hp)},
+    {"Outcome": "Draw", "Probability": pct(dp)},
+    {"Outcome": f"{away} win", "Probability": pct(ap)},
+]
+st.table(result_rows)
+
+most_likely = max(
+    [(f"{home} win", hp), ("Draw", dp), (f"{away} win", ap)],
+    key=lambda x: x[1]
 )
+st.metric("Highest model probability", most_likely[0], pct(most_likely[1]))
+
+st.subheader("📊 Model expectations")
+a,b = st.columns(2)
+a.metric(f"{home} predicted goals", f"{hxg:.2f}")
+b.metric(f"{away} predicted goals", f"{axg:.2f}")
+c,d = st.columns(2)
+c.metric("Predicted total goals", f"{txg:.2f}")
+d.metric("Predicted total corners", f"{tc:.2f}")
 
 st.divider()
+st.subheader("⚽ Total match goals — Over / Under")
+st.table(ou_rows([0.5,1.5,2.5,3.5,4.5,5.5,6.5], txg))
 
-if market == "Total Match Goals":
-    line = st.selectbox("Goal line", [1.5, 2.5, 3.5, 4.5, 5.5])
-    side = st.radio("Prediction", ["Over", "Under"], horizontal=True)
-    home_xg = st.number_input("Expected home goals", 0.10, 5.00, DEFAULT_HOME_XG, 0.05)
-    away_xg = st.number_input("Expected away goals", 0.10, 5.00, DEFAULT_AWAY_XG, 0.05)
-    expected = home_xg + away_xg
-    label = f"{side} {line} total goals"
+st.subheader(f"🥅 {home} goals — Over / Under")
+st.table(ou_rows([0.5,1.5,2.5,3.5,4.5,5.5], hxg))
 
-elif market == "Individual Team Goals":
-    team = st.selectbox("Team", [home, away])
-    line = st.selectbox("Team goal line", [0.5, 1.5, 2.5, 3.5, 4.5])
-    side = st.radio("Prediction", ["Over", "Under"], horizontal=True)
-    default = DEFAULT_HOME_XG if team == home else DEFAULT_AWAY_XG
-    expected = st.number_input(f"Expected goals — {team}", 0.10, 5.00, default, 0.05)
-    label = f"{team}: {side} {line} goals"
+st.subheader(f"🥅 {away} goals — Over / Under")
+st.table(ou_rows([0.5,1.5,2.5,3.5,4.5,5.5], axg))
 
-else:
-    line = st.selectbox("Corner line", [5.5, 6.5, 7.5, 8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 14.5])
-    side = st.radio("Prediction", ["Over", "Under"], horizontal=True)
-    expected = st.number_input("Expected total corners", 1.0, 25.0, DEFAULT_CORNERS, 0.1)
-    label = f"{side} {line} total corners"
-
-if st.button("Calculate Probability", type="primary", use_container_width=True):
-    p_over = over_half_line_probability(line, expected)
-    p = p_over if side == "Over" else 1.0 - p_over
-    opposite = 1.0 - p
-    fair_decimal = 1.0 / p if p > 0 else float("inf")
-
-    st.subheader(f"{home} vs {away}")
-    st.write(f"**Prediction:** {label}")
-    st.metric("Estimated probability", pct(p))
-    st.write(f"Opposite side: **{pct(opposite)}**")
-    st.write(f"Fair decimal odds: **{fair_decimal:.2f}**")
-    st.caption(f"Model expectation used: {expected:.2f}")
+st.subheader("🚩 Total corners — Over / Under")
+st.table(ou_rows([0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5,12.5,13.5,14.5,15.5,16.5,17.5,18.5,19.5], tc))
 
 st.divider()
 st.caption(
-    "Important: this starter version uses a Poisson probability model and user-editable "
-    "expected goals/corners. The default expectations are placeholders, not live EPL estimates. "
-    "The next upgrade can automatically calculate expectations from historical and recent team data."
+    "V4 interface/probability engine. Team-strength and corner inputs are still neutral placeholders, "
+    "not live EPL estimates. The next data-connected version should derive them from real historical "
+    "and recent team performance before these percentages are used for decision-making."
 )
