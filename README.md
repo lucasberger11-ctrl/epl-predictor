@@ -1,38 +1,27 @@
-# EPL Probability Model
+# EPL Simple Predictor
 
-A simple Streamlit app for estimating probabilities for:
-- Total goals (Over/Under half-lines)
-- Total corners (Over/Under half-lines)
-- Both Teams to Score
-- First-half result
+A deliberately simple Streamlit application for three strict EPL markets:
 
-The statistical model is independent of Kalshi. An optional sportsbook decimal-odds input can be blended 70% model / 30% market. Kalshi's YES price is only compared after the prediction is calculated.
+- Total Match Goals: Over/Under 1.5, 2.5, 3.5, 4.5, 5.5
+- Individual Team Goals: Over/Under 0.5, 1.5, 2.5, 3.5, 4.5
+- Total Match Corners: Over/Under 5.5 through 14.5
 
-## Laptop setup
+## How it works
+The app converts an expected number of goals/corners into probabilities with a Poisson model.
+Kalshi prices are NOT used.
 
-1. Install Python 3.11+.
-2. Unzip this folder.
-3. Open Terminal / Command Prompt in the folder.
-4. Install requirements:
+The initial expected-value fields are editable placeholders. This avoids pretending that static
+numbers are current team predictions. A later version can automatically generate those expected
+values from EPL historical/recent data.
 
+## Run locally
+1. Install Python.
+2. In this folder run:
    pip install -r requirements.txt
-
-5. Start the app:
-
+3. Then:
    streamlit run app.py
 
-Your browser should open the program automatically.
-
-## iPhone
-
-The easiest reliable setup is to run the Streamlit app from a computer/cloud Python host and open its web address in Safari. iOS does not run a normal Streamlit/Python desktop app directly from the Files app.
-
-## Inputs
-
-The included version lets you enter expected home/away goals and corners. These should be updated from current EPL data before using a match prediction.
-
-Sportsbook odds are optional. For serious use, convert both sides of a sportsbook market to de-vigged probabilities rather than entering a single raw implied probability.
-
-## Important
-
-This is a probability estimator, not a guarantee of outcomes or profit.
+## Streamlit Community Cloud
+Upload `app.py`, `requirements.txt`, and this README to the ROOT of your GitHub repository.
+Set the main file path to:
+app.py
