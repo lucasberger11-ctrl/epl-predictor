@@ -1,27 +1,15 @@
-# EPL Simple Predictor
+# EPL ML Predictor
 
-A deliberately simple Streamlit application for three strict EPL markets:
+This version is a genuine machine-learning application.
 
-- Total Match Goals: Over/Under 1.5, 2.5, 3.5, 4.5, 5.5
-- Individual Team Goals: Over/Under 0.5, 1.5, 2.5, 3.5, 4.5
-- Total Match Corners: Over/Under 5.5 through 14.5
+- Downloads historical English Premier League match data from Football-Data.co.uk.
+- Builds pre-match rolling features from each team's previous 8 matches.
+- RandomForestClassifier predicts Home / Draw / Away probabilities.
+- HistGradientBoostingRegressor predicts home goals, away goals, and total corners.
+- Uses a chronological 80/20 train/test split to reduce future-data leakage.
+- Streamlit displays the same core outcomes as the earlier EPL predictor.
 
-## How it works
-The app converts an expected number of goals/corners into probabilities with a Poisson model.
-Kalshi prices are NOT used.
+## Deploy
+Use `app.py` as the Streamlit main file and `requirements.txt` as the dependency file.
 
-The initial expected-value fields are editable placeholders. This avoids pretending that static
-numbers are current team predictions. A later version can automatically generate those expected
-values from EPL historical/recent data.
-
-## Run locally
-1. Install Python.
-2. In this folder run:
-   pip install -r requirements.txt
-3. Then:
-   streamlit run app.py
-
-## Streamlit Community Cloud
-Upload `app.py`, `requirements.txt`, and this README to the ROOT of your GitHub repository.
-Set the main file path to:
-app.py
+The first app load trains the models and caches them. Data are refreshed periodically through Streamlit caching.
